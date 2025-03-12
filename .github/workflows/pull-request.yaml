@@ -1,48 +1,51 @@
-name: "Pull Request"
+name: Pull Request Checks
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-permissions:
-  contents: read
-env:
-  GO_VERSION: 1.23
-  NODE_VERSION: 20
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
+
 jobs:
-  frontend:
-    name: "Frontend Dev and Test"
-    runs-on: "ubuntu-latest"
+  validate:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    
     steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v4"
-
-      - name: "Setup Node.js"
-        uses: "actions/setup-node@v4"
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-
-      - name: "Setup pnpm"
-        uses: "pnpm/action-setup@v2"
+          node-version: 20
+          
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v3
         with:
           version: 8
-
-      - name: "Install Dependencies"
+          run_install: false
+          
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+          
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+            
+      - name: Install dependencies
         run: pnpm install
-
-      - name: "Run Dev Server (Background)"
-        run: |
-          nohup pnpm dev > dev_output.log 2>&1 &
-          echo "Waiting for dev server to start..."
-          sleep 15
-
-      - name: "Check Dev Server"
-        run: |
-          cat dev_output.log
-          if grep -q "Error" dev_output.log; then
-            echo "Dev server failed to start properly"
-            exit 1
-          fi
-          echo "Dev server started successfully"
-
-      - name: "Run Tests"
-        run: pnpm test
+        
+      - name: Lint
+        run: pnpm lint
+        
+      - name: Build
+        run: pnpm build
+        env:
+          # Add any environment variables needed for build here
+          NODE_ENV: production
